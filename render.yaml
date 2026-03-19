@@ -1,0 +1,73 @@
+projects:
+  - name: insurance-voice-demo
+    environments:
+      - name: production
+        services:
+          # Frontend - React Static Site
+          - type: web
+            runtime: static
+            name: insurance-demo-frontend
+            rootDir: frontend
+            buildCommand: npm install && npm run build
+            staticPublishPath: dist
+            pullRequestPreviewsEnabled: true
+            envVars:
+              - key: VITE_API_HOST
+                fromService:
+                  name: insurance-demo-api
+                  type: web
+                  property: host
+            headers:
+              - path: /*
+                name: X-Frame-Options
+                value: DENY
+            routes:
+              - type: rewrite
+                source: /*
+                destination: /index.html
+
+          # API Server - FastAPI
+          - type: web
+            runtime: python
+            name: insurance-demo-api
+            rootDir: api
+            plan: starter
+            buildCommand: pip install -r requirements.txt
+            startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+            healthCheckPath: /api/health
+            envVars:
+              - fromGroup: livekit-config
+              - fromGroup: render-config
+
+          # LiveKit Agent - Must be a worker (persistent connection to LiveKit)
+          - type: worker
+            runtime: python
+            name: insurance-demo-agent
+            rootDir: agent
+            plan: starter
+            buildCommand: pip install -r requirements.txt
+            startCommand: python main.py start
+            envVars:
+              - fromGroup: livekit-config
+              - fromGroup: ai-config
+              - key: API_HOST
+                fromService:
+                  name: insurance-demo-api
+                  type: web
+                  property: host
+
+# NOTE: Environment groups are NOT defined here to prevent Blueprint from
+# overwriting values on each deploy. Create these groups manually in Dashboard:
+#
+# 1. livekit-config:
+#    - LIVEKIT_URL
+#    - LIVEKIT_API_KEY
+#    - LIVEKIT_API_SECRET
+#
+# 2. render-config:
+#    - RENDER_API_KEY
+#    - WORKFLOW_SERVICE_ID
+#
+# 3. ai-config:
+#    - OPENAI_API_KEY
+#
